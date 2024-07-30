@@ -2,7 +2,6 @@
 from microbit import *
 from math import *
 from neopixel import NeoPixel
-
 # from maqueen import Maqueen
 
 # mq = Maqueen()
@@ -30,38 +29,59 @@ def ledrgb(n,r,g,b):
     np[floor(n)]=(floor(r),floor(g),floor(b))
     np.show()
 
-n = 1000  # Number of samples in series
+n = 100  # Number of samples in series
 period = 10    # Period of sampling (in milliseconds)
 gain = 10      # Gain factor
 sl_n = [0] * n  # Initialize sound level list with zeros
 energy_n = [0] * n  # Initialize energy list with zeros
 window_size = 10  # Window size for energy calculation
-threshold = 1.2  # Threshold for peak detection
+threshold = 1.1  # Threshold for peak detection
+max_peaks = 10  # Maximum number of peak times to store
 peak_times = []  # List to store the times of detected peaks
-
 i, x = 0, 0  # Initialize index
 
+running_sum = 0  # Running sum for energy calculation
+print('yo')
 while True:
     sleep(period / 1000.0)  # Sleep for the sampling period
-    # Write new line
-    x = (x + 1) % 5
     sl = microphone.sound_level() * gain  # Get sound level and apply gain
     i = (i + 1) % n  # Update index circularly
-    sl_n[i] = sl  # Store the sound level
 
-    # Calculate the energy of the signal in the current window
-    energy = 0
-    for j in range(window_size):
-        energy += sl_n[(i - j) % n] ** 2  # Sum of squares of the last window_size samples
-    energy /= window_size  # Average energy over the window
+    # Update running sum for the sliding window energy calculation
+    if i < window_size:
+        running_sum += sl ** 2
+    else:
+        running_sum += sl ** 2 - sl_n[i - window_size] ** 2
+
+    sl_n[i] = sl  # Store the sound level
+    energy = running_sum / window_size  # Calculate average energy over the window
     energy_n[i] = energy  # Store the calculated energy
 
     # Calculate the average energy of all stored energies
     avg_energy = sum(energy_n) / n
 
-    # Detect peak only at the most recent index
-    if energy_n[i] > threshold * avg_energy and energy_n[i] > energy_n[i - 1] and energy_n[i] > energy_n[(i + 1) % n]:
-        #print(f"Detected peak at index: {i}")
+    prev_index = (i - 1) % n
+    prev_prev_index = (i - 2) % n
+    if i > 1 and energy_n[i] > threshold * avg_energy and energy_n[prev_index] > energy_n[prev_prev_index] and energy_n[prev_index] > energy_n[i]:
+        peak_times.append(running_time())  # Store the time of the detected peak in millisecond
+        if len(peak_times) > max_peaks:
+            peak_times.pop(0)  # Remove the oldest peak time to maintain the list size
         display.show(Image.HEART)
     else:
         display.clear()
+    # Calculate tempo based on peak intervals
+    if len(peak_times) > 1:
+        # Calculate intervals between consecutive peaks
+        intervals = [peak_times[j] - peak_times[j - 1] for j in range(1, len(peak_times))]
+        
+        # Calculate the average interval
+        avg_interval = sum(intervals) / len(intervals)
+
+        # Debugging output
+        #print("Intervals (ms) : ",intervals)
+        #print("Average interval (ms): ", avg_interval)
+        
+        # Calculate tempo in beats per minute (BPM)
+        bpm = 60000 / avg_interval  # Convert from milliseconds to minutes
+        
+        print("Estimated tempo : ", bpm)
